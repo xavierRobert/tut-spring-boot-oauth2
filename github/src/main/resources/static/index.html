@@ -25,6 +25,11 @@
 		<div>
 			With Google: <a href="/login/google">click here</a>
 		</div>
+		<div class="container">
+			<div>
+				<button ng-click="home.basicLogin()" class="btn btn-primary">Login</button>
+			</div>
+		</div>
 	</div>
 	<div class="container" ng-show="home.authenticated">
 		Logged in as: <span ng-bind="home.user"></span>
@@ -62,6 +67,27 @@
 							self.authenticated = false;
 						});
 					};
+
+					self.basicLogin = function(user, pwd, enterpriseId) {
+						var that = this;
+//						var MD5 = new Hashes.MD5();
+//						var passwordMD5 = MD5.hex(pwd);
+//						var auth = BASIC_AUTH_PREFIX + base64.encode(user + ":" + passwordMD5);
+						//$http.defaults.headers.common['Authorization'] = "Basic JSYkKDEwMjItMjAxNzI0MC0xMDIyMDExLUVBRyk6MTg1ZWNhOTY1YWRjMTljZjNlZjkyNmIzNzY4MTZhMmI=";
+
+						$http.get("/hola2").success(function(data) {
+							if (data) {
+								self.user = data;
+								self.authenticated = true;
+							} else {
+								self.user = "N/A";
+								self.authenticated = false;
+							}
+						}).error(function() {
+							self.user = "N/A";
+							self.authenticated = false;
+						});
+					}
 				});
 	</script>
 </body>

@@ -26,6 +26,7 @@ import javax.servlet.Filter;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.autoconfigure.security.oauth2.resource.AuthoritiesExtractor;
 import org.springframework.boot.autoconfigure.security.oauth2.resource.ResourceServerProperties;
 import org.springframework.boot.autoconfigure.security.oauth2.resource.UserInfoTokenServices;
 import org.springframework.boot.context.properties.ConfigurationProperties;
@@ -34,9 +35,13 @@ import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.annotation.Order;
+import org.springframework.security.config.annotation.authentication.builders.AuthenticationManagerBuilder;
+import org.springframework.security.config.annotation.method.configuration.EnableGlobalMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.WebSecurityConfigurerAdapter;
+import org.springframework.security.core.authority.AuthorityUtils;
 import org.springframework.security.oauth2.client.OAuth2ClientContext;
+import org.springframework.security.oauth2.client.OAuth2RestOperations;
 import org.springframework.security.oauth2.client.OAuth2RestTemplate;
 import org.springframework.security.oauth2.client.filter.OAuth2ClientAuthenticationProcessingFilter;
 import org.springframework.security.oauth2.client.filter.OAuth2ClientContextFilter;
@@ -57,6 +62,7 @@ import org.springframework.web.filter.CompositeFilter;
 @RestController
 @EnableOAuth2Client
 @EnableAuthorizationServer
+@EnableGlobalMethodSecurity(prePostEnabled = true, securedEnabled = true)
 @Order(6)
 public class SocialApplication extends WebSecurityConfigurerAdapter {
 
@@ -70,16 +76,87 @@ public class SocialApplication extends WebSecurityConfigurerAdapter {
 		return map;
 	}
 
+    @Bean
+    public OAuth2RestTemplate oauth2RestTemplate(OAuth2ProtectedResourceDetails resource, OAuth2ClientContext context) {
+        return new OAuth2RestTemplate(resource, context);
+    }
+
+    @Bean
+    public AuthoritiesExtractor authoritiesExtractorFacebook(OAuth2RestOperations template) {
+        return map -> {
+			return AuthorityUtils.commaSeparatedStringToAuthorityList("ROLE_OAUTH, ROLE_LOGIN, ROLE_FACEBOOK");
+        };
+    }
+    @Bean
+    public AuthoritiesExtractor authoritiesExtractorGithub(OAuth2RestOperations template) {
+        return map -> {
+			return AuthorityUtils.commaSeparatedStringToAuthorityList("ROLE_OAUTH, ROLE_LOGIN, ROLE_GITHUB");
+        };
+    }
+    @Bean
+    public AuthoritiesExtractor authoritiesExtractorGoogle(OAuth2RestOperations template) {
+        return map -> {
+			return AuthorityUtils.commaSeparatedStringToAuthorityList("ROLE_OAUTH, ROLE_LOGIN, ROLE_GOOGLE");
+        };
+    }
+
+    @Autowired
+    public void configureGlobalSecurity(AuthenticationManagerBuilder auth) throws Exception {
+        auth.inMemoryAuthentication().withUser("admin").password("4321").roles("ADMIN", "LOGIN"); //adds authorities ROLE_ADMIN
+        auth.inMemoryAuthentication().withUser("user").password("4321").roles("USER", "LOGIN"); //adds authorities ROLE_USER
+    }
+
 	@Override
 	protected void configure(HttpSecurity http) throws Exception {
 		// @formatter:off
-		http.antMatcher("/**").authorizeRequests().antMatchers("/", "/login**", "/webjars/**").permitAll().anyRequest()
-				.authenticated().and().exceptionHandling()
-				.authenticationEntryPoint(new LoginUrlAuthenticationEntryPoint("/")).and().logout()
-				.logoutSuccessUrl("/").permitAll().and().csrf()
-				.csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse()).and()
-				.addFilterBefore(ssoFilter(), BasicAuthenticationFilter.class);
+
+        //BOTH 2
+        http.antMatcher("/**").authorizeRequests().antMatchers("/", "/login**", "/webjars/**").permitAll().anyRequest()
+                .authenticated()
+
+                //HTTP Basic
+//                .and().httpBasic().realmName("MY_TEST_REALM").authenticationEntryPoint(getBasicAuthEntryPoint())
+//                .and().sessionManagement().sessionCreationPolicy(SessionCreationPolicy.STATELESS)
+
+                //OAUTH2
+                .and().exceptionHandling()
+                .authenticationEntryPoint(new LoginUrlAuthenticationEntryPoint("/")).and().logout()
+                .logoutSuccessUrl("/").permitAll().and().csrf()
+                .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse()).and()
+                .addFilterBefore(ssoFilter(), BasicAuthenticationFilter.class);
+
+        //BOTH 1
+//        http.antMatcher("/**").authorizeRequests().antMatchers("/", "/login**", "/webjars/**").permitAll().anyRequest()
+//                .authenticated()
+//                .and().httpBasic().realmName("MY_TEST_REALM").authenticationEntryPoint(getBasicAuthEntryPoint())
+//                .and().sessionManagement().sessionCreationPolicy(SessionCreationPolicy.STATELESS)
+//                .and().exceptionHandling()
+//                .authenticationEntryPoint(new LoginUrlAuthenticationEntryPoint("/")).and().logout()
+//                .logoutSuccessUrl("/").permitAll().and().csrf()
+//                .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse()).and()
+//                .addFilterBefore(ssoFilter(), BasicAuthenticationFilter.class);
+
+        //OAUTH2
+//		http.antMatcher("/**").authorizeRequests().antMatchers("/", "/login**", "/webjars/**").permitAll().anyRequest()
+//				.authenticated().and().exceptionHandling()
+//				.authenticationEntryPoint(new LoginUrlAuthenticationEntryPoint("/")).and().logout()
+//				.logoutSuccessUrl("/").permitAll().and().csrf()
+//				.csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse()).and()
+//				.addFilterBefore(ssoFilter(), BasicAuthenticationFilter.class);
+
+        //HTTPBASIC
+//		http.csrf().disable()
+//				.authorizeRequests()
+//				.antMatchers("/**").hasRole("LOGIN")
+//				.and().httpBasic().realmName("MY_TEST_REALM").authenticationEntryPoint(getBasicAuthEntryPoint())
+//				.and().sessionManagement().sessionCreationPolicy(SessionCreationPolicy.STATELESS);//We don't need session.
+
 		// @formatter:on
+	}
+
+	@Bean
+	public CustomBasicAuthenticationEntryPoint getBasicAuthEntryPoint(){
+		return new CustomBasicAuthenticationEntryPoint();
 	}
 
 	@Configuration
@@ -141,6 +218,18 @@ public class SocialApplication extends WebSecurityConfigurerAdapter {
 		UserInfoTokenServices tokenServices = new UserInfoTokenServices(client.getResource().getUserInfoUri(),
 				client.getClient().getClientId());
 		tokenServices.setRestTemplate(oAuth2RestTemplate);
+		switch (path){
+			case "/login/facebook":
+				tokenServices.setAuthoritiesExtractor(authoritiesExtractorFacebook(oAuth2RestTemplate));
+				break;
+			case"/login/github":
+				tokenServices.setAuthoritiesExtractor(authoritiesExtractorGithub(oAuth2RestTemplate));
+				break;
+			case"/login/google":
+				tokenServices.setAuthoritiesExtractor(authoritiesExtractorGoogle(oAuth2RestTemplate));
+				break;
+		}
+
 		oAuth2ClientAuthenticationFilter.setTokenServices(tokenServices);
 		return oAuth2ClientAuthenticationFilter;
 	}
