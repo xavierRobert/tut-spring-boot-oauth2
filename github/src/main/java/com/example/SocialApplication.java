@@ -39,6 +39,7 @@ import org.springframework.security.config.annotation.authentication.builders.Au
 import org.springframework.security.config.annotation.method.configuration.EnableGlobalMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.WebSecurityConfigurerAdapter;
+import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.core.authority.AuthorityUtils;
 import org.springframework.security.oauth2.client.OAuth2ClientContext;
 import org.springframework.security.oauth2.client.OAuth2RestOperations;
@@ -100,6 +101,7 @@ public class SocialApplication extends WebSecurityConfigurerAdapter {
         };
     }
 
+    //Add users that will be used for the HTTP basic login
     @Autowired
     public void configureGlobalSecurity(AuthenticationManagerBuilder auth) throws Exception {
         auth.inMemoryAuthentication().withUser("admin").password("4321").roles("ADMIN", "LOGIN"); //adds authorities ROLE_ADMIN
@@ -119,11 +121,11 @@ public class SocialApplication extends WebSecurityConfigurerAdapter {
 //                .and().sessionManagement().sessionCreationPolicy(SessionCreationPolicy.STATELESS)
 
                 //OAUTH2
-                .and().exceptionHandling()
-                .authenticationEntryPoint(new LoginUrlAuthenticationEntryPoint("/")).and().logout()
-                .logoutSuccessUrl("/").permitAll().and().csrf()
-                .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse()).and()
-                .addFilterBefore(ssoFilter(), BasicAuthenticationFilter.class);
+                .and().exceptionHandling().authenticationEntryPoint(new LoginUrlAuthenticationEntryPoint("/"))
+                //.and().sessionManagement().sessionCreationPolicy(SessionCreationPolicy.STATELESS)
+                .and().logout().logoutSuccessUrl("/").permitAll()
+                .and().csrf().csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
+                .and().addFilterBefore(ssoFilter(), BasicAuthenticationFilter.class);
 
         //BOTH 1
 //        http.antMatcher("/**").authorizeRequests().antMatchers("/", "/login**", "/webjars/**").permitAll().anyRequest()
@@ -210,6 +212,12 @@ public class SocialApplication extends WebSecurityConfigurerAdapter {
 		return filter;
 	}
 
+    /**
+     * Here we define which authorities are added depending on the login provider
+     * @param client
+     * @param path
+     * @return
+     */
 	private Filter ssoFilter(ClientResources client, String path) {
 		OAuth2ClientAuthenticationProcessingFilter oAuth2ClientAuthenticationFilter = new OAuth2ClientAuthenticationProcessingFilter(
 				path);
